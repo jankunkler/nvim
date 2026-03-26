@@ -1,6 +1,3 @@
--- Add the local user directory to the runtime path, which is where lazy.nvim installs plugins and parsers
-vim.opt.rtp:prepend(vim.fn.stdpath 'data' .. '/site')
-
 -- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
@@ -141,19 +138,7 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
-vim.api.nvim_create_autocmd('FileType', {
-  pattern = 'json',
-  callback = function()
-    vim.api.nvim_create_autocmd('BufWritePre', {
-      buffer = 0,
-      callback = function()
-        vim.cmd [[%!jq '.']]
-      end,
-    })
-  end,
-})
-
--- Add JSON pretty print command
+-- JSON pretty print command (:JsonPretty)
 vim.api.nvim_create_user_command('JsonPretty', function()
   vim.cmd '%!jq "."'
 end, {})
@@ -824,27 +809,6 @@ require('lazy').setup({
     },
   },
 
-  { -- You can easily change to a different colorscheme.
-    -- Change the name of the colorscheme plugin below, and then
-    -- change the command in the config to whatever the name of that colorscheme is.
-    --
-    -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-    'folke/tokyonight.nvim',
-    priority = 1000, -- Make sure to load this before all the other start plugins.
-    config = function()
-      ---@diagnostic disable-next-line: missing-fields
-      require('tokyonight').setup {
-        styles = {
-          comments = { italic = false }, -- Disable italics in comments
-        },
-      }
-
-      -- Load the colorscheme here.
-      -- Like many other themes, this one has different styles, and you could load
-      -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'cobalt2'
-    end,
-  },
 
   -- Highlight todo, notes, etc in comments
   { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
