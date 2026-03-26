@@ -205,6 +205,17 @@ require('lazy').setup({
         topdelete = { text = '‾' },
         changedelete = { text = '~' },
       },
+      on_attach = function(bufnr)
+        local gs = require 'gitsigns'
+        local map = function(mode, l, r, desc)
+          vim.keymap.set(mode, l, r, { buffer = bufnr, desc = desc })
+        end
+        map('n', '<leader>hn', function() gs.nav_hunk 'next' end, '[H]unk [N]ext')
+        map('n', '<leader>hN', function() gs.nav_hunk 'prev' end, '[H]unk [P]rev')
+        map('n', '<leader>hp', gs.preview_hunk_inline, '[H]unk [P]review')
+        map('n', '<leader>hb', gs.toggle_current_line_blame, '[H]unk [B]lame toggle')
+        map('n', '<leader>hd', gs.diffthis, '[H]unk [D]iff')
+      end,
     },
   },
 
@@ -271,15 +282,19 @@ require('lazy').setup({
         { '<leader>s', group = '[S]earch' },
         { '<leader>t', group = '[T]oggle' },
         { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
+        { '<leader>g', group = '[G]it' },
+        { '<leader>d', group = '[D]iff' },
+        { '<leader>o', group = '[O]cto PR' },
       },
     },
   },
   -- Load the custom Cobalt2 Theme
   {
     'lalitmee/cobalt2.nvim',
-    event = { 'ColorSchemePre' }, -- if you want to lazy load
+    lazy = false,
+    priority = 1000,
     dependencies = { 'tjdevries/colorbuddy.nvim', tag = 'v1.0.0' },
-    init = function()
+    config = function()
       require('colorbuddy').colorscheme 'cobalt2'
     end,
   },
@@ -337,15 +352,12 @@ require('lazy').setup({
       -- [[ Configure Telescope ]]
       -- See `:help telescope` and `:help telescope.setup()`
       require('telescope').setup {
-        -- You can put your default mappings / updates / etc. in here
-        --  All the info you're looking for is in `:help telescope.setup()`
-        --
-        -- defaults = {
-        --   mappings = {
-        --     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
-        --   },
-        -- },
-        -- pickers = {}
+        defaults = {
+          file_ignore_patterns = { '%.git/' },
+        },
+        pickers = {
+          find_files = { hidden = true },
+        },
         extensions = {
           ['ui-select'] = {
             require('telescope.themes').get_dropdown(),
@@ -906,6 +918,46 @@ require('lazy').setup({
     'nvim-treesitter/nvim-treesitter-textobjects',
     branch = 'main',
     dependencies = { 'nvim-treesitter/nvim-treesitter' },
+  },
+
+  -- Git integration: blame, log, GBrowse (open on GitHub)
+  -- rhubarb adds GitHub support for :GBrowse
+  { 'tpope/vim-fugitive' },
+  { 'tpope/vim-rhubarb' },
+
+  -- Better diff viewer: side-by-side diffs, file panel, commit history
+  {
+    'sindrets/diffview.nvim',
+    cmd = { 'DiffviewOpen', 'DiffviewFileHistory', 'DiffviewClose' },
+    config = function()
+      require('diffview').setup()
+      local map = vim.keymap.set
+      map('n', '<leader>do', '<cmd>DiffviewOpen<CR>', { desc = '[D]iff [O]pen' })
+      map('n', '<leader>df', '<cmd>DiffviewFileHistory %<CR>', { desc = '[D]iff [F]ile history' })
+      map('n', '<leader>dc', '<cmd>DiffviewClose<CR>', { desc = '[D]iff [C]lose' })
+    end,
+  },
+
+  -- GitHub PR review: list/view PRs, inline comments, approve/request changes
+  {
+    'pwntester/octo.nvim',
+    cmd = 'Octo',
+    dependencies = {
+      'nvim-lua/plenary.nvim',
+      'nvim-telescope/telescope.nvim',
+      'nvim-tree/nvim-web-devicons',
+    },
+    config = function()
+      require('octo').setup { picker = 'telescope' }
+      local map = vim.keymap.set
+      -- Open PR list / notifications
+      map('n', '<leader>op', '<cmd>Octo pr list<CR>', { desc = '[O]cto [P]R list' })
+      map('n', '<leader>on', '<cmd>Octo notification list<CR>', { desc = '[O]cto [N]otifications' })
+      -- Review actions (use inside an Octo PR buffer)
+      map('n', '<leader>or', '<cmd>Octo review start<CR>', { desc = '[O]cto [R]eview start' })
+      map('n', '<leader>os', '<cmd>Octo review submit<CR>', { desc = '[O]cto review [S]ubmit' })
+      map('n', '<leader>oa', '<cmd>Octo review approve<CR>', { desc = '[O]cto [A]pprove' })
+    end,
   },
 
   -- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the
