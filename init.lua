@@ -138,10 +138,30 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
+-- Suppress LSP diagnostics in octo buffers (virtual buffers with octo:// paths)
+vim.api.nvim_create_autocmd('BufEnter', {
+  callback = function(args)
+    if vim.api.nvim_buf_get_name(args.buf):match '^octo://' then
+      vim.diagnostic.enable(false, { bufnr = args.buf })
+    end
+  end,
+})
+
 -- JSON pretty print command (:JsonPretty)
 vim.api.nvim_create_user_command('JsonPretty', function()
   vim.cmd '%!jq "."'
 end, {})
+
+-- PR review: checkout branch and open octo PR buffer (:ReviewPR <number>)
+-- Use <Space>or to start review, <Space>oa to approve, <Space>os to submit
+-- <Space>do still available if you want a deeper look in diffview
+vim.api.nvim_create_user_command('ReviewPR', function(opts)
+  local pr = opts.args
+  vim.notify('Checking out PR #' .. pr .. '...', vim.log.levels.INFO)
+  vim.fn.system('gh pr checkout ' .. pr)
+  vim.notify('Opening PR #' .. pr .. ' in Octo...', vim.log.levels.INFO)
+  vim.cmd('Octo pr edit ' .. pr)
+end, { nargs = 1, desc = 'Checkout PR and open in Octo' })
 
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
@@ -678,6 +698,19 @@ require('lazy').setup({
           end,
         },
       }
+
+      -- Pyright: use new vim.lsp.config API to set pythonPath before server starts.
+      -- Finds nearest .venv walking up from the project root (works with uv workspaces).
+      vim.lsp.config('pyright', {
+        before_init = function(_, config)
+          local venv = vim.fn.finddir('.venv', config.root_dir .. ';')
+          if venv ~= '' then
+            config.settings = config.settings or {}
+            config.settings.python = config.settings.python or {}
+            config.settings.python.pythonPath = vim.fn.fnamemodify(venv, ':p') .. 'bin/python'
+          end
+        end,
+      })
     end,
   },
 
@@ -948,11 +981,31 @@ require('lazy').setup({
       'nvim-tree/nvim-web-devicons',
     },
     config = function()
-      require('octo').setup { picker = 'telescope' }
+      require('octo').setup {
+        picker = 'telescope',
+        github_hostname = 'lobster.ghe.com',
+        mappings = {
+          -- Remap bracket navigation to leader keys (QWERTZ: [ ] require Option modifier)
+          review_diff = {
+            select_next_unviewed_entry = { lhs = '<leader>ou', desc = 'Next unviewed file' },
+            select_prev_unviewed_entry = { lhs = '<leader>oU', desc = 'Prev unviewed file' },
+            select_next_entry = { lhs = '<leader>on', desc = 'Next changed file' },
+            select_prev_entry = { lhs = '<leader>oN', desc = 'Prev changed file' },
+            next_thread = { lhs = '<leader>ot', desc = 'Next comment thread' },
+            prev_thread = { lhs = '<leader>oT', desc = 'Prev comment thread' },
+          },
+          file_panel = {
+            select_next_unviewed_entry = { lhs = '<leader>ou', desc = 'Next unviewed file' },
+            select_prev_unviewed_entry = { lhs = '<leader>oU', desc = 'Prev unviewed file' },
+            select_next_entry = { lhs = '<leader>on', desc = 'Next changed file' },
+            select_prev_entry = { lhs = '<leader>oN', desc = 'Prev changed file' },
+          },
+        },
+      }
       local map = vim.keymap.set
       -- Open PR list / notifications
       map('n', '<leader>op', '<cmd>Octo pr list<CR>', { desc = '[O]cto [P]R list' })
-      map('n', '<leader>on', '<cmd>Octo notification list<CR>', { desc = '[O]cto [N]otifications' })
+      map('n', '<leader>oi', '<cmd>Octo notification list<CR>', { desc = '[O]cto [I]nbox notifications' })
       -- Review actions (use inside an Octo PR buffer)
       map('n', '<leader>or', '<cmd>Octo review start<CR>', { desc = '[O]cto [R]eview start' })
       map('n', '<leader>os', '<cmd>Octo review submit<CR>', { desc = '[O]cto review [S]ubmit' })
