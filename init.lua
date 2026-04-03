@@ -517,6 +517,17 @@ require('lazy').setup({
       --    That is to say, every time a new file is opened that is associated with
       --    an lsp (for example, opening `main.rs` is associated with `rust_analyzer`) this
       --    function will be executed to configure the current buffer
+      -- Disable ruff hover in favour of pyrefly
+      vim.api.nvim_create_autocmd('LspAttach', {
+        group = vim.api.nvim_create_augroup('lsp-attach-disable-ruff-hover', { clear = true }),
+        callback = function(args)
+          local client = vim.lsp.get_client_by_id(args.data.client_id)
+          if client and client.name == 'ruff' then
+            client.server_capabilities.hoverProvider = false
+          end
+        end,
+      })
+
       vim.api.nvim_create_autocmd('LspAttach', {
         group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
         callback = function(event)
@@ -668,7 +679,19 @@ require('lazy').setup({
       local servers = {
         -- clangd = {},
         -- gopls = {},
-        pyright = {},
+        -- Ruff LSP handles linting; pyrefly handles type checking
+        -- See https://docs.astral.sh/ruff/editors/setup/
+        -- Pyrefly: Rust-based Python type checker (replaces pyright)
+        -- See https://pyrefly.org/en/stable/ide-integrations/neovim/
+        pyrefly = {
+          settings = {
+            python = {
+              pyrefly = {
+                displayTypeErrors = 'force-on',
+              },
+            },
+          },
+        },
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
@@ -729,18 +752,8 @@ require('lazy').setup({
         },
       }
 
-      -- Pyright: use new vim.lsp.config API to set pythonPath before server starts.
-      -- Finds nearest .venv walking up from the project root (works with uv workspaces).
-      vim.lsp.config('pyright', {
-        before_init = function(_, config)
-          local venv = vim.fn.finddir('.venv', config.root_dir .. ';')
-          if venv ~= '' then
-            config.settings = config.settings or {}
-            config.settings.python = config.settings.python or {}
-            config.settings.python.pythonPath = vim.fn.fnamemodify(venv, ':p') .. 'bin/python'
-          end
-        end,
-      })
+      vim.lsp.enable('ruff')
+
     end,
   },
 
