@@ -65,6 +65,8 @@ vim.o.splitbelow = true
 --   and `:help lua-options-guide`
 vim.o.list = true
 vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
+vim.opt.grepprg = 'rg --vimgrep'
+vim.opt.grepformat = '%f:%l:%c:%m'
 
 -- Preview substitutions live, as you type!
 vim.o.inccommand = 'split'
@@ -143,6 +145,15 @@ vim.api.nvim_create_autocmd('TextYankPost', {
 })
 
 
+-- Markdown: spell check and conceallevel
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'markdown',
+  callback = function()
+    vim.opt_local.spell = true
+    vim.opt_local.conceallevel = 2
+  end,
+})
+
 -- JSON pretty print command (:JsonPretty)
 vim.api.nvim_create_user_command('JsonPretty', function()
   vim.cmd '%!jq "."'
@@ -152,7 +163,11 @@ end, {})
 vim.api.nvim_create_user_command('ReviewPR', function(opts)
   local pr = opts.args
   vim.notify('Checking out PR #' .. pr .. '...', vim.log.levels.INFO)
-  vim.fn.system('gh pr checkout ' .. pr)
+  local checkout_out = vim.fn.system('gh pr checkout ' .. pr)
+  if vim.v.shell_error ~= 0 then
+    vim.notify('Failed to checkout PR #' .. pr .. ': ' .. checkout_out, vim.log.levels.ERROR)
+    return
+  end
   vim.fn.system('git pull --rebase --autostash')
   local base = vim.fn.system('gh pr view ' .. pr .. ' --json baseRefName --jq .baseRefName'):gsub('%s+$', '')
   if base ~= '' then
@@ -351,6 +366,7 @@ require('lazy').setup({
         end,
       },
       { 'nvim-telescope/telescope-ui-select.nvim' },
+      { 'nvim-telescope/telescope-live-grep-args.nvim', version = '^1.0.0' },
 
       -- Useful for getting pretty icons, but requires a Nerd Font.
       { 'nvim-tree/nvim-web-devicons', enabled = vim.g.have_nerd_font },
@@ -388,12 +404,20 @@ require('lazy').setup({
           ['ui-select'] = {
             require('telescope.themes').get_dropdown(),
           },
+          live_grep_args = {
+            mappings = {
+              i = {
+                ['<C-k>'] = require('telescope-live-grep-args.actions').quote_prompt(),
+              },
+            },
+          },
         },
       }
 
       -- Enable Telescope extensions if they are installed
       pcall(require('telescope').load_extension, 'fzf')
       pcall(require('telescope').load_extension, 'ui-select')
+      pcall(require('telescope').load_extension, 'live_grep_args')
 
       -- See `:help telescope.builtin`
       local builtin = require 'telescope.builtin'
@@ -402,7 +426,7 @@ require('lazy').setup({
       vim.keymap.set('n', '<leader>sf', builtin.find_files, { desc = '[S]earch [F]iles' })
       vim.keymap.set('n', '<leader>ss', builtin.builtin, { desc = '[S]earch [S]elect Telescope' })
       vim.keymap.set('n', '<leader>sw', builtin.grep_string, { desc = '[S]earch current [W]ord' })
-      vim.keymap.set('n', '<leader>sg', builtin.live_grep, { desc = '[S]earch by [G]rep' })
+      vim.keymap.set('n', '<leader>sg', require('telescope').extensions.live_grep_args.live_grep_args, { desc = '[S]earch by [G]rep' })
       vim.keymap.set('n', '<leader>sd', builtin.diagnostics, { desc = '[S]earch [D]iagnostics' })
       vim.keymap.set('n', '<leader>sr', builtin.resume, { desc = '[S]earch [R]esume' })
       vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
@@ -532,7 +556,7 @@ require('lazy').setup({
 
           -- Fuzzy find all the symbols in your current document.
           --  Symbols are things like variables, functions, types, etc.
-          map('gO', require('telescope.builtin').lsp_document_symbols, 'Open Document Symbols')
+          map('gS', require('telescope.builtin').lsp_document_symbols, 'Open Document Symbols')
 
           -- Fuzzy find all the symbols in your current workspace.
           --  Similar to document symbols, except searches over your entire project.
@@ -752,11 +776,7 @@ require('lazy').setup({
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
-        -- Conform can also run multiple formatters sequentially
-        -- python = { "isort", "black" },
-        --
-        -- You can use 'stop_after_first' to run the first available formatter from the list
-        -- javascript = { "prettierd", "prettier", stop_after_first = true },
+        python = { 'ruff_format' },
       },
     },
   },
@@ -820,6 +840,7 @@ require('lazy').setup({
         --
         -- See :h blink-cmp-config-keymap for defining your own keymap
         preset = 'default',
+        ['<C-x>'] = { 'show', 'show_documentation', 'hide_documentation' },
 
         -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
         --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
@@ -945,12 +966,14 @@ require('lazy').setup({
       require('nvim-treesitter').setup {
         ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'python' },
         auto_install = true,
-        highlight = {
-          enable = true,
-          additional_vim_regex_highlighting = { 'ruby' },
-        },
-        indent = { enable = true, disable = { 'ruby' } },
       }
+      vim.api.nvim_create_autocmd('FileType', {
+        pattern = { 'bash', 'c', 'diff', 'html', 'lua', 'markdown', 'python', 'query', 'vim' },
+        callback = function()
+          vim.treesitter.start()
+          vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+        end,
+      })
     end,
   },
   { -- Provides treesitter textobject captures for mini.ai
@@ -975,6 +998,51 @@ require('lazy').setup({
       map('n', '<leader>df', '<cmd>DiffviewFileHistory %<CR>', { desc = '[D]iff [F]ile history' })
       map('n', '<leader>dc', '<cmd>DiffviewClose<CR>', { desc = '[D]iff [C]lose' })
     end,
+  },
+
+  -- Sidekick: AI CLI integration (Claude, Gemini, …) + Copilot Next Edit Suggestions
+  {
+    'folke/sidekick.nvim',
+    opts = {
+      nes = { enabled = false },
+      cli = {
+        layout = 'right',
+        picker = 'snacks',
+      },
+    },
+    keys = {
+      { '<C-.>', function() require('sidekick.cli').focus() end, desc = 'Sidekick Focus', mode = { 'n', 't', 'i', 'x' } },
+      { '<leader>aa', function() require('sidekick.cli').toggle() end, desc = 'AI toggle CLI' },
+      { '<leader>ac', function() require('sidekick.cli').toggle({ name = 'claude', focus = true }) end, desc = 'AI toggle Claude' },
+      { '<leader>as', function() require('sidekick.cli').select() end, desc = 'AI select tool' },
+      { '<leader>ad', function() require('sidekick.cli').close() end, desc = 'AI detach session' },
+      { '<leader>at', function() require('sidekick.cli').send({ msg = '{this}' }) end, mode = { 'n', 'x' }, desc = 'AI send this' },
+      { '<leader>af', function() require('sidekick.cli').send({ msg = '{file}' }) end, desc = 'AI send file' },
+      { '<leader>av', function() require('sidekick.cli').send({ msg = '{selection}' }) end, mode = 'x', desc = 'AI send selection' },
+      { '<leader>ap', function() require('sidekick.cli').prompt() end, mode = { 'n', 'x' }, desc = 'AI prompt picker' },
+    },
+  },
+
+  -- Outline sidebar for code symbols and markdown headings
+  {
+    'stevearc/aerial.nvim',
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons' },
+    opts = {
+      on_attach = function(bufnr)
+        vim.keymap.set('n', '<leader>en', '<cmd>AerialNext<CR>', { buffer = bufnr, desc = '[E]xplore [N]ext symbol' })
+        vim.keymap.set('n', '<leader>ep', '<cmd>AerialPrev<CR>', { buffer = bufnr, desc = '[E]xplore [P]rev symbol' })
+      end,
+    },
+    keys = {
+      { '<leader>et', '<cmd>AerialToggle!<CR>', desc = '[E]xplore [T]oggle outline' },
+    },
+  },
+
+  -- Render markdown visually inline (headings, bold, code blocks, etc.)
+  {
+    'MeanderingProgrammer/render-markdown.nvim',
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons' },
+    opts = {},
   },
 
   -- GitHub PR review: list/view PRs, inline comments, approve/request changes
@@ -1029,11 +1097,12 @@ require('lazy').setup({
       map('n', '<leader>op', '<cmd>Octo pr list<CR>', { desc = '[O]cto [P]R list' })
       map('n', '<leader>oi', '<cmd>Octo notification list<CR>', { desc = '[O]cto [I]nbox notifications' })
       map('n', '<leader>or', '<cmd>Octo review start<CR>', { desc = '[O]cto [R]eview start' })
+      map('n', '<leader>oR', '<cmd>Octo review resume<CR>', { desc = '[O]cto [R]eview resume' })
       map('n', '<leader>os', '<cmd>Octo review submit<CR>', { desc = '[O]cto review [S]ubmit' })
       map('n', '<leader>oa', '<cmd>Octo review approve<CR>', { desc = '[O]cto [A]pprove' })
 
-      -- Patch recover_layout to defer vsplit via vim.schedule, avoiding E242 when closing
-      -- comment buffers (BufEnter fires while window is still closing with use_local_fs=true)
+      -- Workaround for upstream octo.nvim bug: recover_layout calls vsplit inside a BufEnter
+      -- autocmd that fires while a window is still closing, causing E242 with use_local_fs=true
       local layout = require 'octo.reviews.layout'
       local orig_recover = layout.Layout.recover_layout
       layout.Layout.recover_layout = function(self, state)
@@ -1053,7 +1122,7 @@ require('lazy').setup({
   --
   -- require 'kickstart.plugins.debug',
   -- require 'kickstart.plugins.indent_line',
-  -- require 'kickstart.plugins.lint',
+  require 'kickstart.plugins.lint',
   -- require 'kickstart.plugins.autopairs',
   -- require 'kickstart.plugins.neo-tree',
   -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
