@@ -517,16 +517,6 @@ require('lazy').setup({
       --    That is to say, every time a new file is opened that is associated with
       --    an lsp (for example, opening `main.rs` is associated with `rust_analyzer`) this
       --    function will be executed to configure the current buffer
-      -- Disable ruff hover in favour of pyrefly
-      vim.api.nvim_create_autocmd('LspAttach', {
-        group = vim.api.nvim_create_augroup('lsp-attach-disable-ruff-hover', { clear = true }),
-        callback = function(args)
-          local client = vim.lsp.get_client_by_id(args.data.client_id)
-          if client and client.name == 'ruff' then
-            client.server_capabilities.hoverProvider = false
-          end
-        end,
-      })
 
       vim.api.nvim_create_autocmd('LspAttach', {
         group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
@@ -679,9 +669,7 @@ require('lazy').setup({
       local servers = {
         -- clangd = {},
         -- gopls = {},
-        -- Ruff LSP handles linting; pyrefly handles type checking
-        -- See https://docs.astral.sh/ruff/editors/setup/
-        -- Pyrefly: Rust-based Python type checker (replaces pyright)
+        -- Pyrefly: type checking, completions, hover (ruff handles formatting via conform.nvim)
         -- See https://pyrefly.org/en/stable/ide-integrations/neovim/
         pyrefly = {
           settings = {
@@ -751,8 +739,6 @@ require('lazy').setup({
           end,
         },
       }
-
-      vim.lsp.enable('ruff')
 
     end,
   },
@@ -984,7 +970,10 @@ require('lazy').setup({
         pattern = { 'bash', 'c', 'diff', 'html', 'lua', 'markdown', 'python', 'query', 'vim' },
         callback = function()
           vim.treesitter.start()
-          vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          -- Python indentation handled by vim-python-pep8-indent, not treesitter
+          if vim.bo.filetype ~= 'python' then
+            vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          end
         end,
       })
     end,
@@ -998,6 +987,7 @@ require('lazy').setup({
   -- Git integration: blame, log, GBrowse (open on GitHub)
   -- rhubarb adds GitHub support for :GBrowse
   { 'tpope/vim-fugitive' },
+  { 'Vimjas/vim-python-pep8-indent' }, -- PEP8-compliant Python indentation
   { 'tpope/vim-rhubarb' },
 
   -- Better diff viewer: side-by-side diffs, file panel, commit history
