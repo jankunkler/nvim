@@ -99,6 +99,10 @@ vim.keymap.set('n', '<C-u>', '<C-u>zz')
 -- Diagnostic keymaps
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 
+-- Diff hunk navigation (replaces ]c / [c which require [ ] on QWERTZ)
+vim.keymap.set('n', '<leader>hn', ']c', { desc = 'Diff [H]unk [N]ext' })
+vim.keymap.set('n', '<leader>hN', '[c', { desc = 'Diff [H]unk [P]rev' })
+
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
 -- is not what someone will guess without a bit more experience.
@@ -150,6 +154,7 @@ vim.api.nvim_create_autocmd('FileType', {
   pattern = 'markdown',
   callback = function()
     vim.opt_local.spell = true
+    vim.opt_local.spelllang = 'en' -- switch per buffer with :set spelllang=de
     vim.opt_local.conceallevel = 2
   end,
 })
@@ -877,6 +882,11 @@ require('lazy').setup({
 
       -- Shows a signature help window while you type arguments for a function
       signature = { enabled = true },
+
+      -- Disable completions in Agentic prompt buffers
+      enabled = function()
+        return not vim.tbl_contains({ 'AgenticInput' }, vim.bo.filetype)
+      end,
     },
   },
 
@@ -1003,26 +1013,28 @@ require('lazy').setup({
     end,
   },
 
-  -- Sidekick: AI CLI integration (Claude, Gemini, …) + Copilot Next Edit Suggestions
+  -- Agentic: AI chat UI via Agent Client Protocol (ACP)
+  -- Requires: pnpm add -g @agentclientprotocol/claude-agent-acp
   {
-    'folke/sidekick.nvim',
+    'carlos-algms/agentic.nvim',
     opts = {
-      nes = { enabled = false },
-      cli = {
-        layout = 'right',
-        picker = 'snacks',
+      provider = 'claude-agent-acp',
+      keymaps = {
+        diff_preview = {
+          next_hunk = '<leader>hn',
+          prev_hunk = '<leader>hN',
+        },
       },
     },
     keys = {
-      { '<C-.>', function() require('sidekick.cli').focus() end, desc = 'Sidekick Focus', mode = { 'n', 't', 'i', 'x' } },
-      { '<leader>aa', function() require('sidekick.cli').toggle() end, desc = 'AI toggle CLI' },
-      { '<leader>ac', function() require('sidekick.cli').toggle({ name = 'claude', focus = true }) end, desc = 'AI toggle Claude' },
-      { '<leader>as', function() require('sidekick.cli').select() end, desc = 'AI select tool' },
-      { '<leader>ad', function() require('sidekick.cli').close() end, desc = 'AI detach session' },
-      { '<leader>at', function() require('sidekick.cli').send({ msg = '{this}' }) end, mode = { 'n', 'x' }, desc = 'AI send this' },
-      { '<leader>af', function() require('sidekick.cli').send({ msg = '{file}' }) end, desc = 'AI send file' },
-      { '<leader>av', function() require('sidekick.cli').send({ msg = '{selection}' }) end, mode = 'x', desc = 'AI send selection' },
-      { '<leader>ap', function() require('sidekick.cli').prompt() end, mode = { 'n', 'x' }, desc = 'AI prompt picker' },
+      { '<C-.>', function() require('agentic').toggle() end, mode = { 'n', 'v', 'i' }, desc = 'AI toggle chat' },
+      { '<leader>aa', function() require('agentic').toggle() end, desc = 'AI toggle chat' },
+      { '<leader>an', function() require('agentic').new_session() end, desc = 'AI new session' },
+      { '<leader>ar', function() require('agentic').restore_session() end, desc = 'AI restore session' },
+      { '<leader>ac', function() require('agentic').add_selection_or_file_to_context() end, mode = { 'n', 'v' }, desc = 'AI add context' },
+      { '<leader>ad', function() require('agentic').add_current_line_diagnostics() end, desc = 'AI add diagnostics' },
+      { '<leader>aD', function() require('agentic').add_buffer_diagnostics() end, desc = 'AI add all diagnostics' },
+      { '<leader>ax', function() require('agentic').stop_generation() end, desc = 'AI stop generation' },
     },
   },
 
@@ -1045,7 +1057,9 @@ require('lazy').setup({
   {
     'MeanderingProgrammer/render-markdown.nvim',
     dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons' },
-    opts = {},
+    opts = {
+      file_types = { 'markdown', 'AgenticChat' },
+    },
   },
 
   -- GitHub PR review: list/view PRs, inline comments, approve/request changes
